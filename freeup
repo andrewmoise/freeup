@@ -1,0 +1,73 @@
+#!/usr/bin/perl -w
+use strict;
+
+use File::Find;
+use Term::ReadKey;
+
+my @file_score;
+
+# Find a score indicating how good this file would be to present to the user
+sub score_for_file
+{
+    my ($file) = @_;
+    return (-s $file);
+}
+
+# Callback for File::Find
+sub wanted
+{
+    if (-f $_)
+    {
+	my $this_score = score_for_file($_);
+	push @file_score, [$File::Find::name, $this_score];
+    }
+}
+
+# Convert a file size to a friendly representation
+sub human_filesize
+{
+    my ($size) = @_;
+    if ($size > 1024*1024*1024)
+    {
+	return int($size/1024/1024/1024) . "G";
+    }
+    elsif ($size > 1024*1024)
+    {
+	return int($size/1024/1024) . "M";
+    }
+    elsif ($size > 1024)
+    {
+	return int($size/1024) . "K";
+    }
+    else
+    {
+	return $size;
+    }
+}
+
+die "Need to specify target directory" unless @ARGV;
+
+find(\&wanted, @ARGV);
+
+@file_score = sort {$b->[1] <=> $a->[1]} @file_score;
+
+file: foreach my $file (@file_score)
+{
+    my ($name, $score) = @$file;
+    print human_filesize(-s $name), "  $name [D]elete/[S]kip/[Q]uit? ";
+
+    do
+    {
+	my $line = <STDIN>;
+
+	last file if $line =~ /^q/i;
+	if ($line =~ /^d/i)
+	{
+	    print "Want to delete: $name\n";
+	    #unlink $name or warn "Couldn't delete: $!";
+	    next file;
+	}
+	next file if $line =~ /^s/i;
+	print "Unrecognized key.\n";
+    } while(1);
+}
