@@ -4,42 +4,68 @@ use strict;
 use bigint;
 
 use Fcntl;
+use File::Basename;
 use File::Find;
 use NDBM_File;
 
 my %file_history; # (filename => last timestamp when we asked the user about it)
 
-my @file_score; # array of [filename, score] array refs
-my @batch_score; # array of [score, filename, filename, etc.] array refs
+my @file_score; # array of [filename, size] arrayrefs
 
-# Find a score indicating how good this file would be to present to the user
-sub score_for_file
-{
-    my ($file) = @_;
-    
-    my $score = -s $file;
+my $best_size = 0;  # Size of best range so far
+my $best_index = undef; # Index of beginning of best range so far
+my $best_length = undef; # Length of best range so far
 
-    my $last_ask_time = $file_history{$file};
-    if ($last_ask_time)
-    {
-	my $age = time() - $last_ask_time;
-	my $decay = $age / (60 * 60 * 24 * 30);
-	if ($decay < 1)
-	{
-	    $score *= $decay;
-	}
-    }
+my $this_index = 0; # Index of beginning of current range
+my $this_size = 0; # Size of current range
 
-    return $score;
-}
+my $index = 0;
+
+my $start_time = time(); # Timestamp of when script started running
+my $REASK_TIME = 60 * 60 * 24 * 30; # How long to wait before reasking about a file
 
 # Callback for File::Find
 sub wanted
 {
     if (-f $_)
     {
-	my $this_score = score_for_file($File::Find::name);
-	push @file_score, [$File::Find::name, $this_score];
+	my $this_history = $file_history{$File::Find::name};
+	my $size = -s $File::Find::name;
+
+	if ($this_history and $this_history > $start_time - $REASK_TIME)
+	{
+	    # We've found a file that's been looked at in recent history
+	    
+	    if ($this_size > $best_size)
+	    {
+		# We've broken the record for the best range
+		$best_index = $this_index;
+		$best_length = $index + 1 - $this_index;
+		$best_size = $this_size;
+	    }
+
+	    # Reset everything, we start a new range on the next item
+	    $this_index = $index + 1;
+	    $this_size = 0;
+	}
+	else
+	{
+	    # We're just continuing the current range
+	    $this_size += $size;
+	}
+	
+	$index += 1;
+	push @file_score, [$File::Find::name, $size];
+    }
+}
+
+sub finish_file_iter
+{
+    if ($this_size > $best_size)
+    {
+	$best_index = $this_index;
+	$best_length = $index + 1 - $this_index;
+	$best_size = $this_size;
     }
 }
 
@@ -65,30 +91,6 @@ sub human_filesize
     }
 }
 
-# Batch up file scores into batch scores
-sub create_batch_scores
-{
-    my @file_list;
-    my $current_score = 0;
-    foreach my $file (@file_score)
-    {
-	push @file_list, $file->[0];
-	$current_score += $file->[1];
-	
-	if (@file_list >= 10)
-	{
-	    push @batch_score, [$current_score, @file_list];
-	    @file_list = ();
-	    $current_score = 0;
-	}
-    }
-
-    if (@file_list)
-    {
-	push @batch_score, [$current_score, @file_list];
-    }
-}
-
 die "Need to specify target directory" unless @ARGV;
 
 mkdir "$ENV{HOME}/.freeup";
@@ -100,14 +102,41 @@ tie(%file_history,
     or die "$0: Tie failed: $!";
 
 find(\&wanted, @ARGV);
-create_batch_scores();
-@batch_score = sort {$b->[0] <=> $a->[0]} @batch_score;
+finish_file_iter();
 
-my ($score, @files) = @{$batch_score[0]};
-file: foreach my $name (@files)
+print "Best range is $best_index, len $best_length, out of $index\n";
+
+my $best_midpoint = $best_index + int($best_length / 2);
+my $best_file = $file_score[$best_midpoint][0];
+
+print human_filesize($file_score[$best_midpoint][1]), "  $file_score[$best_midpoint][0]\n";
+
+my $best_dir_size = 0;
+my $best_dir_and_subdirs_size = 0;
+
+my $best_dir = dirname($best_file) . '/';
+my $best_dir_len = length($best_dir);
+for my $file_iter (@file_score)
 {
-    print human_filesize(-s $name), "  $name\n";
-    $file_history{$name} = time();
+    my $name = $file_iter->[0];
+
+    my $iter_dir = substr($name, 0, $best_dir_len);
+    if ($iter_dir eq $best_dir)
+    {
+	my $size = $file_iter->[1];
+	$best_dir_and_subdirs_size += $size;
+
+	my $other_part = substr($name, $best_dir_len);
+	if ($other_part !~ /\//)
+	{
+	    $best_dir_size += $size;
+	}
+    }
 }
+
+print human_filesize($best_dir_size), "  $best_dir\*\n";
+print human_filesize($best_dir_and_subdirs_size), "  $best_dir...\n";
+
+$file_history{$best_file} = time();
 
 untie(%file_history);
