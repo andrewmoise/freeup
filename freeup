@@ -69,6 +69,18 @@ sub finish_file_iter
     }
 }
 
+sub find_best_midpoint
+{
+    my $remaining_size = $best_size / 2;
+    for my $index ($best_index .. $best_index+$best_length-1)
+    {
+	$remaining_size -= $file_score[$index][1];
+	return $index if ($remaining_size <= 0)
+    }
+
+    die "Can't happen";
+}
+
 # Convert a file size to a friendly representation
 sub human_filesize
 {
@@ -106,7 +118,8 @@ finish_file_iter();
 
 print "Best range is $best_index, len $best_length, out of $index\n";
 
-my $best_midpoint = $best_index + int($best_length / 2);
+my $best_midpoint = find_best_midpoint();
+print "Midpoint is $best_midpoint\n";
 my $best_file = $file_score[$best_midpoint][0];
 
 print human_filesize($file_score[$best_midpoint][1]), "  $file_score[$best_midpoint][0]\n";
