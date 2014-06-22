@@ -1,16 +1,36 @@
 #!/usr/bin/perl -w
 use strict;
 
-use File::Find;
-use Term::ReadKey;
+use bigint;
 
-my @file_score;
+use Fcntl;
+use File::Find;
+use NDBM_File;
+
+my %file_history; # (filename => last timestamp when we asked the user about it)
+
+my @file_score; # array of [filename, score] array refs
+my @batch_score; # array of [score, filename, filename, etc.] array refs
 
 # Find a score indicating how good this file would be to present to the user
 sub score_for_file
 {
     my ($file) = @_;
-    return (-s $file);
+    
+    my $score = -s $file;
+
+    my $last_ask_time = $file_history{$file};
+    if ($last_ask_time)
+    {
+	my $age = time() - $last_ask_time;
+	my $decay = $age / (60 * 60 * 24 * 30);
+	if ($decay < 1)
+	{
+	    $score *= $decay;
+	}
+    }
+
+    return $score;
 }
 
 # Callback for File::Find
@@ -18,7 +38,7 @@ sub wanted
 {
     if (-f $_)
     {
-	my $this_score = score_for_file($_);
+	my $this_score = score_for_file($File::Find::name);
 	push @file_score, [$File::Find::name, $this_score];
     }
 }
@@ -45,29 +65,49 @@ sub human_filesize
     }
 }
 
+# Batch up file scores into batch scores
+sub create_batch_scores
+{
+    my @file_list;
+    my $current_score = 0;
+    foreach my $file (@file_score)
+    {
+	push @file_list, $file->[0];
+	$current_score += $file->[1];
+	
+	if (@file_list >= 10)
+	{
+	    push @batch_score, [$current_score, @file_list];
+	    @file_list = ();
+	    $current_score = 0;
+	}
+    }
+
+    if (@file_list)
+    {
+	push @batch_score, [$current_score, @file_list];
+    }
+}
+
 die "Need to specify target directory" unless @ARGV;
 
+mkdir "$ENV{HOME}/.freeup";
+tie(%file_history,
+    'NDBM_File',
+    "$ENV{HOME}/.freeup/file_history",
+    O_RDWR | O_CREAT,
+    0666)
+    or die "$0: Tie failed: $!";
+
 find(\&wanted, @ARGV);
+create_batch_scores();
+@batch_score = sort {$b->[0] <=> $a->[0]} @batch_score;
 
-@file_score = sort {$b->[1] <=> $a->[1]} @file_score;
-
-file: foreach my $file (@file_score)
+my ($score, @files) = @{$batch_score[0]};
+file: foreach my $name (@files)
 {
-    my ($name, $score) = @$file;
-    print human_filesize(-s $name), "  $name [D]elete/[S]kip/[Q]uit? ";
-
-    do
-    {
-	my $line = <STDIN>;
-
-	last file if $line =~ /^q/i;
-	if ($line =~ /^d/i)
-	{
-	    print "Want to delete: $name\n";
-	    #unlink $name or warn "Couldn't delete: $!";
-	    next file;
-	}
-	next file if $line =~ /^s/i;
-	print "Unrecognized key.\n";
-    } while(1);
+    print human_filesize(-s $name), "  $name\n";
+    $file_history{$name} = time();
 }
+
+untie(%file_history);
