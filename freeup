@@ -14,7 +14,7 @@ my @file_score; # array of [filename, size] arrayrefs
 
 my $best_size = 0;  # Size of best range so far
 my $best_index = undef; # Index of beginning of best range so far
-my $best_length = undef; # Length of best range so far
+my $best_end_index = undef; # Index of end (exclusive) of best range so far
 
 my $this_index = 0; # Index of beginning of current range
 my $this_size = 0; # Size of current range
@@ -40,7 +40,7 @@ sub wanted
 	    {
 		# We've broken the record for the best range
 		$best_index = $this_index;
-		$best_length = $index + 1 - $this_index;
+		$best_end_index = $index + 1;
 		$best_size = $this_size;
 	    }
 
@@ -64,7 +64,7 @@ sub finish_file_iter
     if ($this_size > $best_size)
     {
 	$best_index = $this_index;
-	$best_length = $index + 1 - $this_index;
+	$best_end_index = $index;
 	$best_size = $this_size;
     }
 }
@@ -72,7 +72,7 @@ sub finish_file_iter
 sub find_best_midpoint
 {
     my $remaining_size = $best_size / 2;
-    for my $index ($best_index .. $best_index+$best_length-1)
+    for my $index ($best_index .. $best_end_index-1)
     {
 	$remaining_size -= $file_score[$index][1];
 	return $index if ($remaining_size <= 0)
@@ -116,39 +116,42 @@ tie(%file_history,
 find(\&wanted, @ARGV);
 finish_file_iter();
 
-print "Best range is $best_index, len $best_length, out of $index\n";
+print "Best range is $best_index, end $best_end_index, out of $index\n";
+print "Range begin: $file_score[$best_index][0]\n";
+print "Range end: $file_score[$best_end_index-1][0]\n";
 
 my $best_midpoint = find_best_midpoint();
-print "Midpoint is $best_midpoint\n";
+print "Midpoint is $best_midpoint: $file_score[$best_midpoint][0]\n";
 my $best_file = $file_score[$best_midpoint][0];
 
 print human_filesize($file_score[$best_midpoint][1]), "  $file_score[$best_midpoint][0]\n";
 
-my $best_dir_size = 0;
-my $best_dir_and_subdirs_size = 0;
+my $best_dir = dirname($best_file);
 
-my $best_dir = dirname($best_file) . '/';
-my $best_dir_len = length($best_dir);
-for my $file_iter (@file_score)
+while($best_dir ne '/')
 {
-    my $name = $file_iter->[0];
-
-    my $iter_dir = substr($name, 0, $best_dir_len);
-    if ($iter_dir eq $best_dir)
+    my $best_dir_size = 0;
+    for my $file_iter (@file_score)
     {
-	my $size = $file_iter->[1];
-	$best_dir_and_subdirs_size += $size;
+	my $name = $file_iter->[0];
 
-	my $other_part = substr($name, $best_dir_len);
-	if ($other_part !~ /\//)
+	my $iter_dir = substr($name, 0, length($best_dir)+1);
+	if ($iter_dir eq "$best_dir/")
 	{
-	    $best_dir_size += $size;
+	    $best_dir_size += $file_iter->[1];
 	}
     }
-}
 
-print human_filesize($best_dir_size), "  $best_dir\*\n";
-print human_filesize($best_dir_and_subdirs_size), "  $best_dir...\n";
+    print human_filesize($best_dir_size), "  $best_dir/\n";
+
+    $best_dir = dirname($best_dir);
+    #print "  Testing $best_dir\n";
+    #print "    ", substr($file_score[$best_index][0], 0, length($best_dir)+1), " <=> ", "$best_dir/", "\n";
+    #print "    ", substr($file_score[$best_end_index][0], 0, length($best_dir)+1), " <=> ", "$best_dir/", "\n";
+    last if substr($file_score[$best_index][0], 0, length($best_dir)+1) eq "$best_dir/" and
+	substr($file_score[$best_end_index][0], 0, length($best_dir)+1) eq "$best_dir/";
+    #print "    passed\n";
+}
 
 $file_history{$best_file} = time();
 
