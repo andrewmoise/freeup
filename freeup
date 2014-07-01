@@ -119,6 +119,7 @@ finish_file_iter();
 print "Best range is $best_index, end $best_end_index, out of $index\n";
 print "Range begin: $file_score[$best_index][0]\n";
 print "Range end: $file_score[$best_end_index-1][0]\n";
+print "Range size: ", human_filesize($best_size), "\n";
 
 my $best_midpoint = find_best_midpoint();
 print "Midpoint is $best_midpoint: $file_score[$best_midpoint][0]\n";
@@ -148,6 +149,7 @@ while($best_dir ne '/')
     #print "  Testing $best_dir\n";
     #print "    ", substr($file_score[$best_index][0], 0, length($best_dir)+1), " <=> ", "$best_dir/", "\n";
     #print "    ", substr($file_score[$best_end_index][0], 0, length($best_dir)+1), " <=> ", "$best_dir/", "\n";
+    last if $best_end_index >= $index;
     last if substr($file_score[$best_index][0], 0, length($best_dir)+1) eq "$best_dir/" and
 	substr($file_score[$best_end_index][0], 0, length($best_dir)+1) eq "$best_dir/";
     #print "    passed\n";
