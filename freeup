@@ -24,6 +24,8 @@ my $index = 0;
 my $start_time = time(); # Timestamp of when script started running
 my $REASK_TIME = 60 * 60 * 24 * 30; # How long to wait before reasking about a file
 
+my $topdev; # Device number of top level directory
+
 # Callback for File::Find
 sub wanted
 {
@@ -56,6 +58,13 @@ sub wanted
 	
 	$index += 1;
 	push @file_score, [$File::Find::name, $size];
+    }
+    elsif (-d $_)
+    {
+	# Prune if this directory is in a different filesystem
+	my ($dev,$ino,$mode,$nlink,$uid,$gid) = lstat($_);
+	
+	$File::Find::prune = 1 if ($dev != $topdev);
     }
 }
 
@@ -113,7 +122,13 @@ tie(%file_history,
     0666)
     or die "$0: Tie failed: $!";
 
-find(\&wanted, @ARGV);
+for my $dir (@ARGV)
+{
+    my ($dev,$ino,$mode,$nlink,$uid,$gid) = lstat($dir);
+    $topdev = $dev;
+
+    find(\&wanted, $dir);
+}
 finish_file_iter();
 
 print "Best range is $best_index, end $best_end_index, out of $index\n";
