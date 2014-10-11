@@ -22,21 +22,48 @@ my $this_size = 0; # Size of current range
 my $index = 0;
 
 my $start_time = time(); # Timestamp of when script started running
-my $REASK_TIME = 60 * 60 * 24 * 30; # How long to wait before reasking about a file
 
 my $topdev; # Device number of top level directory
 
 # Callback for File::Find
 sub wanted
 {
+    my ($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size,
+	$atime, $mtime, $ctime, $blksize, $blocks) = lstat($File::Find::name);
+
     if (-f $_)
     {
 	my $this_history = $file_history{$File::Find::name};
-	my $size = -s $File::Find::name;
 
-	if ($this_history and $this_history > $start_time - $REASK_TIME)
+	my $should_break_range = 0;
+
+	if ($this_history)
 	{
-	    # We've found a file that's been looked at in recent history
+	    # We've shown this file before. We need to decide
+	    # stochastically if we've shown it recently enough that we
+	    # should break the range we're currently adding up.
+
+	    my $examined_time = $this_history - $ctime;
+	    my $unexamined_time = time() - $this_history;
+
+	    if ($examined_time <= 0)
+	    {
+		$should_break_range = 0;
+	    }
+	    elsif ($unexamined_time <= 0)
+	    {
+		$should_break_range = 1;
+	    }
+	    elsif (rand($examined_time + $unexamined_time) < $examined_time)
+	    {
+		$should_break_range = 1;
+	    }
+	}
+
+	if ($should_break_range)
+	{
+	    # We want to stop the current range, and start a new one
+	    # after the current point.
 	    
 	    if ($this_size > $best_size)
 	    {
@@ -61,9 +88,6 @@ sub wanted
     }
     elsif (-d $_)
     {
-	# Prune if this directory is in a different filesystem
-	my ($dev,$ino,$mode,$nlink,$uid,$gid) = lstat($_);
-	
 	$File::Find::prune = 1 if ($dev != $topdev);
     }
 }
