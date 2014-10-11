@@ -44,7 +44,7 @@ sub wanted
 	    # should break the range we're currently adding up.
 
 	    my $examined_time = $this_history - $ctime;
-	    my $unexamined_time = time() - $this_history;
+	    my $unexamined_time = $start_time - $this_history;
 
 	    if ($examined_time <= 0)
 	    {
@@ -104,7 +104,7 @@ sub finish_file_iter
 
 sub find_best_midpoint
 {
-    my $remaining_size = $best_size / 2;
+    my $remaining_size = int(rand($best_size)) + 1;
     for my $index ($best_index .. $best_end_index-1)
     {
 	$remaining_size -= $file_score[$index][1];
