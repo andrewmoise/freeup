@@ -13,8 +13,12 @@ my %file_history; # (filename => last timestamp when we asked the user about it)
 my @file_score; # array of [filename, size] arrayrefs
 
 my $best_size = 0;  # Size of best range so far
+
 my $best_index = undef; # Index of beginning of best range so far
 my $best_end_index = undef; # Index of end (exclusive) of best range so far
+
+my $best_index_desc = undef;
+my $best_end_index_desc = undef;
 
 my $this_index = 0; # Index of beginning of current range
 my $this_size = 0; # Size of current range
@@ -34,8 +38,8 @@ sub wanted
     if (-f $_)
     {
 	my $this_history = $file_history{$File::Find::name};
-
 	my $should_break_range = 0;
+	my $examined_desc = "Unexamined";
 
 	if ($this_history)
 	{
@@ -45,19 +49,30 @@ sub wanted
 
 	    my $examined_time = $this_history - $ctime;
 	    my $unexamined_time = $start_time - $this_history;
-
-	    if ($examined_time <= 0)
+	    $examined_desc = int($unexamined_time * 100 /
+				 ($examined_time + $unexamined_time))
+		. '% expired';
+	    
+	    if ($examined_time > 0 and
+		$unexamined_time > 0 and
+		rand($examined_time + $unexamined_time) < $examined_time)
 	    {
+		# We've examined this file somewhat recently, so count
+		# the range that contains it as two smaller ranges of
+		# unexamined files (i.e. "break" the range into two)
+		$should_break_range = 1;
+	    }
+	    else
+	    {
+		# We just "expired" a file that used to break the
+		# range, but hasn't been examined in a while. Treat it
+		# as unexamined again. This also happens under some
+		# odd "can't happen" conditions (if one of the times
+		# is negative).
+		undef $file_history{$File::Find::name};
 		$should_break_range = 0;
 	    }
-	    elsif ($unexamined_time <= 0)
-	    {
-		$should_break_range = 1;
-	    }
-	    elsif (rand($examined_time + $unexamined_time) < $examined_time)
-	    {
-		$should_break_range = 1;
-	    }
+
 	}
 
 	if ($should_break_range)
@@ -69,8 +84,23 @@ sub wanted
 	    {
 		# We've broken the record for the best range
 		$best_index = $this_index;
-		$best_end_index = $index + 1;
+		$best_end_index = $index;
 		$best_size = $this_size;
+
+		if ($best_index == 0)
+		{
+		    $best_index_desc = "Beginning of scan";
+		}
+		else
+		{
+		    $best_index_desc = "$file_score[$best_index-1][0] ("
+			. human_filesize($file_score[$best_index-1][1])
+			. ", $file_score[$best_index-1][2])";
+		}
+
+		$best_end_index_desc = "$File::Find::name ("
+		    . human_filesize($size + $blksize)
+		    . ", $examined_desc)";
 	    }
 
 	    # Reset everything, we start a new range on the next item
@@ -80,11 +110,11 @@ sub wanted
 	else
 	{
 	    # We're just continuing the current range
-	    $this_size += $size;
+	    $this_size += $size + $blksize;
 	}
 	
 	$index += 1;
-	push @file_score, [$File::Find::name, $size];
+	push @file_score, [$File::Find::name, $size + $blksize, $examined_desc];
     }
     elsif (-d $_)
     {
@@ -99,10 +129,23 @@ sub finish_file_iter
 	$best_index = $this_index;
 	$best_end_index = $index;
 	$best_size = $this_size;
+
+	if ($best_index == 0)
+	{
+	    $best_index_desc = "Beginning of scan";
+	}
+	else
+	{
+	    $best_index_desc = "$file_score[$best_index-1][0] ("
+		. human_filesize($file_score[$best_index-1][1])
+		. ", $file_score[$best_index-1][2])";
+	}
+
+	$best_end_index_desc = "End of scan";
     }
 }
 
-sub find_best_midpoint
+sub find_file_in_best_range
 {
     my $remaining_size = int(rand($best_size)) + 1;
     for my $index ($best_index .. $best_end_index-1)
@@ -156,12 +199,12 @@ for my $dir (@ARGV)
 finish_file_iter();
 
 print "Best range is $best_index, end $best_end_index, out of $index\n";
-print "Range begin: $file_score[$best_index][0]\n";
-print "Range end: $file_score[$best_end_index-1][0]\n";
+print "Range begin: $best_index_desc\n";
+print "Range end: $best_end_index_desc\n";
 print "Range size: ", human_filesize($best_size), "\n";
 
-my $best_midpoint = find_best_midpoint();
-print "Midpoint is $best_midpoint: $file_score[$best_midpoint][0]\n";
+my $best_midpoint = find_file_in_best_range();
+print "Chosen file is $best_midpoint: $file_score[$best_midpoint][0]\n";
 my $best_file = $file_score[$best_midpoint][0];
 
 print human_filesize($file_score[$best_midpoint][1]), "  $file_score[$best_midpoint][0]\n";
