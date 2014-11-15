@@ -52,6 +52,13 @@ sub wanted
 	    $examined_desc = int($unexamined_time * 100 /
 				 ($examined_time + $unexamined_time))
 		. '% expired';
+
+	    # Cap unexamined time at 6 months, so that regardless of
+	    # age we present files every so often without waiting
+	    # years
+	    if ($unexamined_time > 60*60*24*30*6) {
+		$unexamined_time = 60*60*24*30*6;
+	    }
 	    
 	    if ($examined_time > 0 and
 		$unexamined_time > 0 and
