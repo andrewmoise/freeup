@@ -298,18 +298,33 @@ tie(%file_history,
     0666)
     or die "$0: Tie failed: $!";
 
-print "Scanning\n" if $verbose;
-
-unless (load_dir_cache(@ARGV))
+if (load_dir_cache(@ARGV))
 {
+    # We just loaded the dir situation from cache
+    print "Loaded dir cache.\n" if $verbose;
+} else {
+    # We couldn't properly load the dir cache, we rescan
+    print "Dir cache invalid, scanning dirs.\n" if $verbose;
+
     scan_dirs(@ARGV);
     save_dir_cache(@ARGV);
 }
 
-print "Finding\n" if $verbose;
+print "Finding...\n" if $verbose;
 
 my $best_midpoint = find_file_in_best_range();
 my $best_file = $file_score[$best_midpoint][0];
+
+if (!-e $best_file) {
+    print "Found $best_file, but does not exist! Rescanning.\n" if $verbose;
+
+    @file_score = ();
+    scan_dirs(@ARGV);
+    save_dir_cache(@ARGV);
+    $best_midpoint = find_file_in_best_range();
+    $best_file = $file_score[$best_midpoint][0];
+}
+
 my $best_dir = dirname($best_file);
 
 print "Printing\n" if $verbose;
