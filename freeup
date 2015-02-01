@@ -132,9 +132,16 @@ sub find_file_in_best_range
 
 	my $this_history = $file_history{$filename};
 	my $should_break_range = 0;
-	$examined_desc = "Unexamined";
 
-	if ($this_history)
+	if ($examined_desc eq 'Unexamined')
+	{
+	    # We know we don't need to check the file history; based
+	    # on the dir cache, it's unexamined. Having this case
+	    # allows us to greatly reduce the number of times we
+	    # consult %file_history (which is costly, since it's a
+	    # tied hash).
+	}
+	elsif ($this_history = $file_history{$filename})
 	{
 	    # We've shown this file before. We need to decide
 	    # stochastically if we've shown it recently enough that we
@@ -173,6 +180,12 @@ sub find_file_in_best_range
 		undef $file_history{$filename};
 		$should_break_range = 0;
 	    }
+	}
+	else
+	{
+	    # Examining the file history just determined that this
+	    # file is unexamined. Mark it so.
+	    $examined_desc = 'Unexamined';
 	}
 
 	if ($should_break_range)
