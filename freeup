@@ -343,6 +343,8 @@ else
     print human_filesize($file_score[$best_midpoint][1]), 
         "  $file_score[$best_midpoint][0]\n";
 
+    my $number_dirs = 0;
+
     while($best_dir ne '/')
     {
 	my $best_dir_size = 0;
@@ -360,13 +362,13 @@ else
 	print human_filesize($best_dir_size), "  $best_dir/\n";
 	
 	$best_dir = dirname($best_dir);
-	#print "  Testing $best_dir\n";
-	#print "    ", substr($file_score[$best_index][0], 0, length($best_dir)+1), " <=> ", "$best_dir/", "\n";
-	#print "    ", substr($file_score[$best_end_index][0], 0, length($best_dir)+1), " <=> ", "$best_dir/", "\n";
+
 	last if $best_end_index >= $index;
 	last if substr($file_score[$best_index][0], 0, length($best_dir)+1) eq "$best_dir/" and
 	    substr($file_score[$best_end_index][0], 0, length($best_dir)+1) eq "$best_dir/";
-	#print "    passed\n";
+
+	$number_dirs += 1;
+	last if $number_dirs >= 3;
     }
 }
 
