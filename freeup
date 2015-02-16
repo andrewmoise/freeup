@@ -319,8 +319,17 @@ if (!-e $best_file) {
     print "Found $best_file, but does not exist! Rescanning.\n" if $verbose;
 
     @file_score = ();
+    $best_size = 0;
+    $best_index = undef;
+    $best_index_desc = undef;
+    $best_end_index_desc = undef;
+    $this_index = 0;
+    $this_size = 0;
+    $index = 0;
+
     scan_dirs(@ARGV);
     save_dir_cache(@ARGV);
+
     $best_midpoint = find_file_in_best_range();
     $best_file = $file_score[$best_midpoint][0];
 }
