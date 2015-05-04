@@ -1,0 +1,29 @@
+freeup is a tool to free up space on your disk.
+
+Generally utilities that do this show you a graphical picture of your
+files, with the idea that you explore the picture and find big files
+you can delete. To my mind this has two flaws:
+
+1. It tends to reach a "steady state" where everything in the picture
+is something you've already looked at and decided you can't delete, so
+it takes some searching to find something you actually can get rid of.
+
+2. It tends to show you big files (which are great when you can delete
+them), but not huge collections of little files (which are often a big
+consumer of disk space).
+
+freeup is designed to solve these problems in a straightforward
+way. Think of what it does as, every time you run it it throws a dart
+at the used space on your disk, and shows you the file where the dart
+landed. That solves problem #2. Then, it remembers where the dart
+landed, and for a reasonably long length of time it avoids that area
+when it's throwing darts. That solves problem #1.
+
+The simplest way to see it working is to try it. Every time you run
+it, it'll show you one file. See if you can delete that file (or other
+files in the immediate area, or other files like that file). Then
+repeat. It does caching of recently scanned filesystems, so it should
+be quick to run it multiple times, and it keeps a persistent record in
+~/.freeup of what files it's examined in the at all recent past.
+
+That's it. Good luck!
