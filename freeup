@@ -288,7 +288,10 @@ sub human_filesize
 
 GetOptions('verbose' => \$verbose);
 
-die "Need to specify target directory" unless @ARGV;
+unless (@ARGV) {
+    print STDERR "Usage: $0 [--verbose] /some/directory ...\n";
+    exit 1;
+}
 
 mkdir "$ENV{HOME}/.freeup";
 tie(%file_history,
